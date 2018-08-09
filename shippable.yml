@@ -1,0 +1,58 @@
+language: none
+
+branches:
+  only:
+    - master
+
+env:
+  global:
+    - REPO: eu.gcr.io/mko-prod/shippable-test
+
+build:
+  ci:
+    - docker build --pull -t $REPO:$COMMIT .
+
+  push:
+    - docker push $REPO:$COMMIT
+
+  #this will be ignored if you are not using Assembly Lines to trigger another job after ci  
+  on_success:
+    - shipctl put_resource_state "shippable-test_img" versionName $COMMIT
+    - shipctl put_resource_state "shippable-test_ver" versionName $(cat VERSION)
+
+integrations:
+  hub:
+    - integrationName: mko-prod
+      type: gcloudKey
+
+resources:
+  - name: shippable-test_ver
+    type: version
+    bump: beta
+    versionTemplate:
+      versionName: "0.0.1"
+
+  - name: shippable-test_img
+    type: image
+    integration: mko-prod
+    versionTemplate:
+      sourcesname: $REPO
+      versionName: latest
+
+jobs:
+  - name: shippable-test_man
+    type: manifest
+    steps:
+      - IN: shippable-test_img
+
+  - name: shippable-test_runCI
+    type: runCI
+    steps:
+      - OUT: shippable-test_man
+
+  - name: shippable-test_rel
+    type: release
+    bump: beta
+    steps:
+      - IN: shippable-test_ver
+      - IN: shippable-test_man
